@@ -1,6 +1,4 @@
-import openpyxl
-
-from Employee import Manager
+from DTO import Manager
 
 
 def add_managers(sheet, *managers):

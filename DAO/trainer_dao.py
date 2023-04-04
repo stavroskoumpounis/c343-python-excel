@@ -1,5 +1,4 @@
-import openpyxl
-from Employee import Trainer
+from DTO import Trainer
 
 
 def add_trainers(sheet, *trainers):

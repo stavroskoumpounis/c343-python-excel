@@ -1,10 +1,7 @@
 import os
 from datetime import datetime
-
 import openpyxl
-
-from Employee import *
-from Course import Course
+from DTO import *
 from DAO import *
 
 # Your existing code for file creation, reading, and writing here
@@ -79,58 +76,74 @@ def create_attendance_sheet(date, start, end, course_id):
     attendance_book.save("attendance_book.xlsx")
 
 
-def display_trainees(trainees):
-    print("ids of trainees")
-    print("-------------------")
+def display_all_trainees(trainees_sheet):
+    trainees = trainee_dao.get_all_trainees(trainees_sheet)
+    print("\nList of all trainees:")
+    print(
+        "{:<8}{:<20}{:<25}{:<10}{:<15}{:<15}".format("ID", "Name", "Email", "Course", "Background", "Work Experience"))
+    print("-----------------------------------------------------------------------------------------------------")
     for trainee in trainees:
-        print(f"{trainee.id} {trainee.name} {'P' if trainee.attendance else 'A'}")
-    print("-------------------")
+        print("{:<8}{:<20}{:<25}{:<10}{:<15}{:<15}".format(trainee.id, trainee.name, trainee.email, trainee.course,
+                                                           trainee.background, trainee.work_exp))
+    print("-----------------------------------------------------------------------------------------------------")
+
+
+def display_trainees_from_attendance(attendance_sheet):
+    print("\nList of trainees and attendance status:")
+    print("{:<8}{:<20}{:<10}".format("ID", "Name", "Attended"))
+    print("--------------------------------------")
+    for row in attendance_sheet.iter_rows(min_row=4):
+        trainee_id, attended = row[0].value, row[1].value
+        trainee = trainee_dao.get_trainees_by_id(trainees_sheet, trainee_id)[0]
+        print("{:<8}{:<20}{:<10}".format(trainee.id, trainee.name, attended))
+    print("--------------------------------------")
 
 
 def record_session_attendance():
-    date = input("Enter date (press Enter for current date): ")
+    date = input("Enter date in format 'May03_2023' (press Enter for current date): ")
     if not date:
         date = datetime.today().strftime('%B%d_%Y')
 
     start_time = input("Enter start time: ")
     end_time = input("Enter end time: ")
-    course_id = input("Enter course ID: ")
 
-    trainer_id = course_dao.get_trainer_for_course(mapping_course_trainer, course_id)
+    while True:
+        course_id = input("Enter course ID (or type 'exit' to quit): ")
+        if course_id.lower() == 'exit':
+            return
+        trainer_id = course_dao.get_trainer_for_course(mapping_course_trainer, course_id)
+        if trainer_id is not None:
+            break
+        else:
+            print("Invalid course ID. Please try again.")
+
     trainer = trainer_dao.get_trainer_by_email_id(trainers_sheet, trainer_id)
     print(f"Trainer: {trainer.name}")
 
+    create_attendance_sheet(date, start_time, end_time, course_id)
+    attendance_sheet = attendance_book[date]
 
-    # TODO: alter absentees
-    trainee_ids = course_dao.get_all_trainees_for_course(mapping_course_trainee, course_id)
-    trainees = [trainee_dao.get_trainees_by_id(trainees_sheet, trainee_id)[0] for trainee_id in trainee_ids]
-    for trainee in trainees:
-        trainee.attendance = True
-
-    display_trainees(trainees)
+    display_trainees_from_attendance(attendance_sheet)
 
     absent_ids = input("Enter IDs of absent trainees (comma-separated): ").split(',')
     absent_ids = [int(id.strip()) for id in absent_ids if id.strip()]
 
-    for trainee in trainees:
-        if trainee.id in absent_ids:
-            trainee.attendance = False
+    attendance_dao.mark_absent(attendance_sheet, absent_ids)
 
-    display_trainees(trainees)
+    # Display the updated list of trainees with their attendance status
+    display_trainees_from_attendance(attendance_sheet)
 
     save = input("Save and submit? (y/n): ")
     if save.lower() == 'y':
-        create_attendance_sheet(date, start_time, end_time, course_id)
-        attendance_sheet = attendance_book[date]
-        attendance_dao.mark_absent(attendance_sheet, absent_ids)
+        attendance_book.save("attendance_book.xlsx")
 
 
 def main_menu():
     while True:
         print("\nMain Menu:")
         print("1. Trainees")
-        print("2. Trainers")
-        print("3. Managers")
+        print("2. Trainers[under construction]")
+        print("3. Managers[under construction]")
         print("4. Record session attendance")
         print("5. Exit")
         choice = int(input("Enter your choice: "))
@@ -149,37 +162,91 @@ def main_menu():
             print("Invalid choice, try again.")
 
 
+def add_trainee():
+    print("Enter trainee details:")
+    id = trainee_dao.get_latest_trainee_id(trainees_sheet) + 1
+    name = input("Name: ")
+    email = input("Email: ")
+    course = input("Course: ")
+    background = input("Background/degree: ")
+    work_exp = int(input("Work experience: "))
+    trainee = Trainee(id, name, email, course, background, work_exp)
+    trainee_dao.add_trainees(trainees_sheet, trainee)
+    course_dao.map_course_trainee(mapping_course_trainee, course, id)
+    wb.save(filename)
+    print("Trainee added successfully.")
+
+
+def update_trainee():
+    id = int(input("Enter trainee ID to update: "))
+    existing_trainees = trainee_dao.get_trainees_by_id(trainees_sheet, id)
+    if not existing_trainees:
+        print("Invalid trainee ID.")
+    else:
+        trainee = existing_trainees[0]
+        print("Enter new trainee details (leave blank to keep the old value):")
+        name = input(f"Name ({trainee.name}): ")
+        email = input(f"Email ({trainee.email}): ")
+        course = input(f"Course ({trainee.course}): ")
+        background = input(f"Background/degree ({trainee.background}): ")
+        work_exp = input(f"Work experience ({trainee.work_exp}): ")
+
+        # Update trainee object with new values if provided
+        if name:
+            trainee.name = name
+        if email:
+            trainee.email = email
+        if course:
+            old_course = trainee.course
+            trainee.course = course
+            # Update mapping_course_trainee if the course is changed
+            course_dao.update_course_trainee_mapping(mapping_course_trainee, old_course, trainee.course, id)
+        if background:
+            trainee.background = background
+        if work_exp:
+            trainee.work_exp = int(work_exp)
+
+        trainee_dao.update_trainees(trainees_sheet, trainee)
+        wb.save(filename)
+        print("Trainee updated successfully.")
+
+
+def delete_trainee():
+    id = int(input("Enter the trainee ID to delete: "))
+    trainee_dao.delete_trainees(trainees_sheet, id)
+    wb.save(filename)
+    print("Trainee deleted successfully.")
+
+
 def trainee_menu():
     while True:
         print("\nTrainee Menu:")
         print("1. Add trainee")
         print("2. Update trainee")
         print("3. Delete trainee")
-        print("4. Back to main menu")
+        print("4. Display all trainees")
+        print("5. Back to main menu")
         choice = int(input("Enter your choice: "))
 
         if choice == 1:
-            # Add trainee implementation
-            pass
+            add_trainee()
         elif choice == 2:
-            # Update trainee implementation
-            pass
+            update_trainee()
         elif choice == 3:
-            # Delete trainee implementation
-            pass
+            delete_trainee()
         elif choice == 4:
+            display_all_trainees(trainees_sheet)
+        elif choice == 5:
             break
         else:
             print("Invalid choice, try again.")
 
 
 def trainer_menu():
-    # Similar implementation as trainee_menu
     pass
 
 
 def manager_menu():
-    # Similar implementation as trainee_menu
     pass
 
 

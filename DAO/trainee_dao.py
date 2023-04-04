@@ -1,6 +1,4 @@
-import openpyxl
-
-from Employee import Trainee
+from DTO import Trainee
 
 
 def add_trainees(sheet, *trainees):
@@ -46,3 +44,9 @@ def get_all_trainees(sheet):
         trainees.append(trainee)
 
     return trainees
+
+
+def get_latest_trainee_id(sheet):
+    if sheet.max_row > 1:
+        return sheet.cell(row=sheet.max_row, column=1).value
+    return 0

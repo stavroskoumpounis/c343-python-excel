@@ -29,3 +29,10 @@ def get_trainer_for_course(sheet, course_id):
     for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
         if row[0].value == course_id:
             return row[1].value
+
+
+def update_course_trainee_mapping(sheet, old_course_id, new_course_id, trainee_id):
+    for row in sheet.iter_rows(min_row=2, max_row=sheet.max_row):
+        if row[0].value == old_course_id and row[1].value == trainee_id:
+            row[0].value = new_course_id
+            break
